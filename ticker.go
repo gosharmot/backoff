@@ -1,7 +1,6 @@
 package backoff
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -14,7 +13,6 @@ type Ticker struct {
 	C        <-chan time.Time
 	c        chan time.Time
 	b        BackOff
-	ctx      context.Context
 	timer    Timer
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -41,7 +39,6 @@ func NewTickerWithTimer(b BackOff, timer Timer) *Ticker {
 		C:     c,
 		c:     c,
 		b:     b,
-		ctx:   getContext(b),
 		timer: timer,
 		stop:  make(chan struct{}),
 	}
@@ -72,8 +69,6 @@ func (t *Ticker) run() {
 			afterC = t.send(tick)
 		case <-t.stop:
 			t.c = nil // Prevent future ticks from being sent to the channel.
-			return
-		case <-t.ctx.Done():
 			return
 		}
 	}

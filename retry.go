@@ -1,23 +1,16 @@
 package backoff
 
 import (
+	"context"
 	"errors"
 	"time"
 )
 
-// An OperationWithData is executing by RetryWithData() or RetryNotifyWithData().
-// The operation will be retried using a backoff policy if it returns an error.
-type OperationWithData[T any] func() (T, error)
+// Retry function stops retrying if the total time exceeds the maximum elapsed time.
+const DefaultMaxElapsedTime = 15 * time.Minute
 
-// An Operation is executing by Retry() or RetryNotify().
-// The operation will be retried using a backoff policy if it returns an error.
-type Operation func() error
-
-func (o Operation) withEmptyData() OperationWithData[struct{}] {
-	return func() (struct{}, error) {
-		return struct{}{}, o()
-	}
-}
+// An Operation is a function that is to be retried.
+type Operation[T any] func() (T, error)
 
 // Notify is a notify-on-error function. It receives an operation error and
 // backoff delay if the operation failed (with an error).
@@ -25,6 +18,47 @@ func (o Operation) withEmptyData() OperationWithData[struct{}] {
 // NOTE that if the backoff policy stated to stop retrying,
 // the notify function isn't called.
 type Notify func(error, time.Duration)
+
+type retryOptions struct {
+	BackOff        BackOff
+	Timer          Timer
+	Notify         Notify
+	MaxElapsedTime time.Duration
+	MaxTries       uint
+}
+
+type RetryOption func(*retryOptions)
+
+func WithBackOff(b BackOff) RetryOption {
+	return func(args *retryOptions) {
+		args.BackOff = b
+	}
+}
+
+func WithTimer(t Timer) RetryOption {
+	return func(args *retryOptions) {
+		args.Timer = t
+	}
+}
+
+func WithNotify(n Notify) RetryOption {
+	return func(args *retryOptions) {
+		args.Notify = n
+	}
+}
+
+// WithMaxElapsedTime sets the maximum total time for retries.
+func WithMaxElapsedTime(d time.Duration) RetryOption {
+	return func(args *retryOptions) {
+		args.MaxElapsedTime = d
+	}
+}
+
+func WithMaxTries(n uint) RetryOption {
+	return func(args *retryOptions) {
+		args.MaxTries = n
+	}
+}
 
 // Retry the operation o until it does not return error or BackOff stops.
 // o is guaranteed to be run at least once.
@@ -34,113 +68,59 @@ type Notify func(error, time.Duration)
 //
 // Retry sleeps the goroutine for the duration returned by BackOff after a
 // failed operation returns.
-func Retry(o Operation, b BackOff) error {
-	return RetryNotify(o, b, nil)
-}
-
-// RetryWithData is like Retry but returns data in the response too.
-func RetryWithData[T any](o OperationWithData[T], b BackOff) (T, error) {
-	return RetryNotifyWithData(o, b, nil)
-}
-
-// RetryNotify calls notify function with the error and wait duration
-// for each failed attempt before sleep.
-func RetryNotify(operation Operation, b BackOff, notify Notify) error {
-	return RetryNotifyWithTimer(operation, b, notify, nil)
-}
-
-// RetryNotifyWithData is like RetryNotify but returns data in the response too.
-func RetryNotifyWithData[T any](operation OperationWithData[T], b BackOff, notify Notify) (T, error) {
-	return doRetryNotify(operation, b, notify, nil)
-}
-
-// RetryNotifyWithTimer calls notify function with the error and wait duration using the given Timer
-// for each failed attempt before sleep.
-// A default timer that uses system timer is used when nil is passed.
-func RetryNotifyWithTimer(operation Operation, b BackOff, notify Notify, t Timer) error {
-	_, err := doRetryNotify(operation.withEmptyData(), b, notify, t)
-	return err
-}
-
-// RetryNotifyWithTimerAndData is like RetryNotifyWithTimer but returns data in the response too.
-func RetryNotifyWithTimerAndData[T any](operation OperationWithData[T], b BackOff, notify Notify, t Timer) (T, error) {
-	return doRetryNotify(operation, b, notify, t)
-}
-
-func doRetryNotify[T any](operation OperationWithData[T], b BackOff, notify Notify, t Timer) (T, error) {
-	var (
-		err  error
-		next time.Duration
-		res  T
-	)
-	if t == nil {
-		t = &defaultTimer{}
+func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOption) (T, error) {
+	// Default options
+	args := &retryOptions{
+		BackOff:        NewExponentialBackOff(),
+		Timer:          &defaultTimer{},
+		MaxElapsedTime: DefaultMaxElapsedTime,
 	}
 
-	defer func() {
-		t.Stop()
-	}()
+	for _, opt := range opts {
+		opt(args)
+	}
 
-	ctx := getContext(b)
+	defer args.Timer.Stop()
 
-	b.Reset()
-	for {
-		res, err = operation()
+	startedAt := time.Now()
+	args.BackOff.Reset()
+	for numTries := uint(1); ; numTries++ {
+		res, err := operation()
 		if err == nil {
 			return res, nil
 		}
 
-		var permanent *PermanentError
-		if errors.As(err, &permanent) {
-			return res, permanent.Err
-		}
-
-		if next = b.NextBackOff(); next == Stop {
-			if cerr := ctx.Err(); cerr != nil {
-				return res, cerr
-			}
-
+		if args.MaxTries > 0 && numTries >= args.MaxTries {
 			return res, err
 		}
 
-		if notify != nil {
-			notify(err, next)
+		if time.Since(startedAt) > args.MaxElapsedTime {
+			return res, err
 		}
 
-		t.Start(next)
+		var permanent *PermanentError
+		if errors.As(err, &permanent) {
+			return res, err
+		}
 
+		next := args.BackOff.NextBackOff()
+		if next == Stop {
+			return res, err
+		}
+
+		if cerr := ctx.Err(); cerr != nil {
+			return res, cerr
+		}
+
+		if args.Notify != nil {
+			args.Notify(err, next)
+		}
+
+		args.Timer.Start(next)
 		select {
+		case <-args.Timer.C():
 		case <-ctx.Done():
 			return res, ctx.Err()
-		case <-t.C():
 		}
-	}
-}
-
-// PermanentError signals that the operation should not be retried.
-type PermanentError struct {
-	Err error
-}
-
-func (e *PermanentError) Error() string {
-	return e.Err.Error()
-}
-
-func (e *PermanentError) Unwrap() error {
-	return e.Err
-}
-
-func (e *PermanentError) Is(target error) bool {
-	_, ok := target.(*PermanentError)
-	return ok
-}
-
-// Permanent wraps the given err in a *PermanentError.
-func Permanent(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &PermanentError{
-		Err: err,
 	}
 }

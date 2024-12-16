@@ -33,20 +33,20 @@ func TestRetry(t *testing.T) {
 	var i = 0
 
 	// This function is successful on "successOn" calls.
-	f := func() error {
+	f := func() (bool, error) {
 		i++
 		log.Printf("function is called %d. time\n", i)
 
 		if i == successOn {
 			log.Println("OK")
-			return nil
+			return true, nil
 		}
 
 		log.Println("error")
-		return errors.New("error")
+		return false, errors.New("error")
 	}
 
-	err := RetryNotifyWithTimer(f, NewExponentialBackOff(), nil, &testTimer{})
+	_, err := Retry(context.Background(), f, WithBackOff(NewExponentialBackOff()), WithTimer(&testTimer{}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
@@ -73,7 +73,7 @@ func TestRetryWithData(t *testing.T) {
 		return 1, errors.New("error")
 	}
 
-	res, err := RetryNotifyWithTimerAndData(f, NewExponentialBackOff(), nil, &testTimer{})
+	res, err := Retry(context.Background(), f, WithBackOff(NewExponentialBackOff()), WithTimer(&testTimer{}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
@@ -93,7 +93,7 @@ func TestRetryContext(t *testing.T) {
 	defer cancel()
 
 	// This function cancels context on "cancelOn" calls.
-	f := func() error {
+	f := func() (bool, error) {
 		i++
 		log.Printf("function is called %d. time\n", i)
 
@@ -104,10 +104,10 @@ func TestRetryContext(t *testing.T) {
 		}
 
 		log.Println("error")
-		return fmt.Errorf("error (%d)", i)
+		return false, fmt.Errorf("error (%d)", i)
 	}
 
-	err := RetryNotifyWithTimer(f, WithContext(NewConstantBackOff(time.Millisecond), ctx), nil, &testTimer{})
+	_, err := Retry(ctx, f, WithBackOff(NewConstantBackOff(time.Millisecond)), WithTimer(&testTimer{}))
 	if err == nil {
 		t.Errorf("error is unexpectedly nil")
 	}
@@ -124,7 +124,8 @@ func TestRetryPermanent(t *testing.T) {
 		numRetries := -1
 		maxRetries := 1
 
-		res, _ := RetryNotifyWithTimerAndData(
+		res, _ := Retry(
+			context.Background(),
 			func() (int, error) {
 				numRetries++
 				if numRetries >= maxRetries {
@@ -132,9 +133,8 @@ func TestRetryPermanent(t *testing.T) {
 				}
 				return f()
 			},
-			NewExponentialBackOff(),
-			nil,
-			&testTimer{},
+			WithBackOff(NewExponentialBackOff()),
+			WithTimer(&testTimer{}),
 		)
 
 		if shouldRetry && numRetries == 0 {

@@ -7,31 +7,11 @@ import (
 
 func ExampleRetry() {
 	// An operation that may fail.
-	operation := func() error {
-		return nil // or an error
+	operation := func() (bool, error) {
+		return true, nil
 	}
 
-	err := Retry(operation, NewExponentialBackOff())
-	if err != nil {
-		// Handle error.
-		return
-	}
-
-	// Operation is successful.
-}
-
-func ExampleRetryContext() { // nolint: govet
-	// A context
-	ctx := context.Background()
-
-	// An operation that may fail.
-	operation := func() error {
-		return nil // or an error
-	}
-
-	b := WithContext(NewExponentialBackOff(), ctx)
-
-	err := Retry(operation, b)
+	_, err := Retry(context.TODO(), operation, WithBackOff(NewExponentialBackOff()))
 	if err != nil {
 		// Handle error.
 		return
