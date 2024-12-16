@@ -6,76 +6,75 @@ import (
 	"time"
 )
 
-// Retry function stops retrying if the total time exceeds the maximum elapsed time.
+// DefaultMaxElapsedTime sets a default limit for the total retry duration.
 const DefaultMaxElapsedTime = 15 * time.Minute
 
-// An Operation is a function that is to be retried.
+// Operation is a function that attempts an operation and may be retried.
 type Operation[T any] func() (T, error)
 
-// Notify is a notify-on-error function. It receives an operation error and
-// backoff delay if the operation failed (with an error).
-//
-// NOTE that if the backoff policy stated to stop retrying,
-// the notify function isn't called.
+// Notify is a function called on operation error with the error and backoff duration.
 type Notify func(error, time.Duration)
 
+// retryOptions holds configuration settings for the retry mechanism.
 type retryOptions struct {
-	BackOff        BackOff
-	Timer          Timer
-	Notify         Notify
-	MaxElapsedTime time.Duration
-	MaxTries       uint
+	BackOff        BackOff       // Strategy for calculating backoff periods.
+	Timer          Timer         // Timer to manage retry delays.
+	Notify         Notify        // Optional function to notify on each retry error.
+	MaxTries       uint          // Maximum number of retry attempts.
+	MaxElapsedTime time.Duration // Maximum total time for all retries.
 }
 
 type RetryOption func(*retryOptions)
 
+// WithBackOff configures a custom backoff strategy.
 func WithBackOff(b BackOff) RetryOption {
 	return func(args *retryOptions) {
 		args.BackOff = b
 	}
 }
 
+// WithTimer sets a custom timer for managing delays between retries.
+// TODO: Decide whether to make this configurable.
 func WithTimer(t Timer) RetryOption {
 	return func(args *retryOptions) {
 		args.Timer = t
 	}
 }
 
+// WithNotify sets a notification function to handle retry errors.
 func WithNotify(n Notify) RetryOption {
 	return func(args *retryOptions) {
 		args.Notify = n
 	}
 }
 
-// WithMaxElapsedTime sets the maximum total time for retries.
-func WithMaxElapsedTime(d time.Duration) RetryOption {
-	return func(args *retryOptions) {
-		args.MaxElapsedTime = d
-	}
-}
-
+// WithMaxTries limits the number of retry attempts.
 func WithMaxTries(n uint) RetryOption {
 	return func(args *retryOptions) {
 		args.MaxTries = n
 	}
 }
 
-// Retry the operation o until it does not return error or BackOff stops.
-// o is guaranteed to be run at least once.
+// WithMaxElapsedTime limits the total duration for retry attempts.
+func WithMaxElapsedTime(d time.Duration) RetryOption {
+	return func(args *retryOptions) {
+		args.MaxElapsedTime = d
+	}
+}
+
+// Retry attempts the operation until success, a permanent error, or backoff completion.
+// It ensures the operation is executed at least once.
 //
-// If o returns a *PermanentError, the operation is not retried, and the
-// wrapped error is returned.
-//
-// Retry sleeps the goroutine for the duration returned by BackOff after a
-// failed operation returns.
+// Returns the operation result or error if retries are exhausted or context is cancelled.
 func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOption) (T, error) {
-	// Default options
+	// Initialize default retry options.
 	args := &retryOptions{
 		BackOff:        NewExponentialBackOff(),
 		Timer:          &defaultTimer{},
 		MaxElapsedTime: DefaultMaxElapsedTime,
 	}
 
+	// Apply user-provided options to the default settings.
 	for _, opt := range opts {
 		opt(args)
 	}
@@ -85,37 +84,46 @@ func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOpti
 	startedAt := time.Now()
 	args.BackOff.Reset()
 	for numTries := uint(1); ; numTries++ {
+		// Execute the operation.
 		res, err := operation()
 		if err == nil {
 			return res, nil
 		}
 
+		// Stop retrying if maximum tries exceeded.
 		if args.MaxTries > 0 && numTries >= args.MaxTries {
 			return res, err
 		}
 
+		// Stop retrying if maximum elapsed time exceeded.
+		// TODO: Stop if next backoff is greater than max elapsed time.
 		if time.Since(startedAt) > args.MaxElapsedTime {
 			return res, err
 		}
 
+		// Handle permanent errors without retrying.
 		var permanent *PermanentError
 		if errors.As(err, &permanent) {
 			return res, err
 		}
 
+		// Calculate next backoff duration.
 		next := args.BackOff.NextBackOff()
 		if next == Stop {
 			return res, err
 		}
 
+		// Stop retrying if context is cancelled.
 		if cerr := ctx.Err(); cerr != nil {
 			return res, cerr
 		}
 
+		// Notify on error if a notifier function is provided.
 		if args.Notify != nil {
 			args.Notify(err, next)
 		}
 
+		// Wait for the next backoff period or context cancellation.
 		args.Timer.Start(next)
 		select {
 		case <-args.Timer.C():
