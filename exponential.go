@@ -11,17 +11,17 @@ period for each retry attempt using a randomization function that grows exponent
 
 NextBackOff() is calculated using the following formula:
 
- randomized interval =
-     RetryInterval * (random value in range [1 - RandomizationFactor, 1 + RandomizationFactor])
+	randomized interval =
+	    RetryInterval * (random value in range [1 - RandomizationFactor, 1 + RandomizationFactor])
 
 In other words NextBackOff() will range between the randomization factor
 percentage below and above the retry interval.
 
 For example, given the following parameters:
 
- RetryInterval = 2
- RandomizationFactor = 0.5
- Multiplier = 2
+	RetryInterval = 2
+	RandomizationFactor = 0.5
+	Multiplier = 2
 
 the actual backoff period used in the next retry attempt will range between 1 and 3 seconds,
 multiplied by the exponential, that is, between 2 and 6 seconds.
@@ -36,18 +36,18 @@ The elapsed time can be reset by calling Reset().
 Example: Given the following default arguments, for 10 tries the sequence will be,
 and assuming we go over the MaxElapsedTime on the 10th try:
 
- Request #  RetryInterval (seconds)  Randomized Interval (seconds)
+	Request #  RetryInterval (seconds)  Randomized Interval (seconds)
 
-  1          0.5                     [0.25,   0.75]
-  2          0.75                    [0.375,  1.125]
-  3          1.125                   [0.562,  1.687]
-  4          1.687                   [0.8435, 2.53]
-  5          2.53                    [1.265,  3.795]
-  6          3.795                   [1.897,  5.692]
-  7          5.692                   [2.846,  8.538]
-  8          8.538                   [4.269, 12.807]
-  9         12.807                   [6.403, 19.210]
- 10         19.210                   backoff.Stop
+	 1          0.5                     [0.25,   0.75]
+	 2          0.75                    [0.375,  1.125]
+	 3          1.125                   [0.562,  1.687]
+	 4          1.687                   [0.8435, 2.53]
+	 5          2.53                    [1.265,  3.795]
+	 6          3.795                   [1.897,  5.692]
+	 7          5.692                   [2.846,  8.538]
+	 8          8.538                   [4.269, 12.807]
+	 9         12.807                   [6.403, 19.210]
+	10         19.210                   backoff.Stop
 
 Note: Implementation is not thread-safe.
 */
@@ -56,10 +56,9 @@ type ExponentialBackOff struct {
 	RandomizationFactor float64
 	Multiplier          float64
 	MaxInterval         time.Duration
-	// After MaxElapsedTime the ExponentialBackOff returns Stop.
+	// After MaxElapsedTime the ExponentialBackOff stops.
 	// It never stops if MaxElapsedTime == 0.
 	MaxElapsedTime time.Duration
-	Stop           time.Duration
 	Clock          Clock
 
 	currentInterval time.Duration
@@ -91,7 +90,6 @@ func NewExponentialBackOff(opts ...ExponentialBackOffOpts) *ExponentialBackOff {
 		Multiplier:          DefaultMultiplier,
 		MaxInterval:         DefaultMaxInterval,
 		MaxElapsedTime:      DefaultMaxElapsedTime,
-		Stop:                Stop,
 		Clock:               SystemClock,
 	}
 	for _, fn := range opts {
@@ -136,13 +134,6 @@ func WithMaxElapsedTime(duration time.Duration) ExponentialBackOffOpts {
 	}
 }
 
-// WithRetryStopDuration sets the duration after which retries should stop.
-func WithRetryStopDuration(duration time.Duration) ExponentialBackOffOpts {
-	return func(ebo *ExponentialBackOff) {
-		ebo.Stop = duration
-	}
-}
-
 // WithClockProvider sets the clock used to measure time.
 func WithClockProvider(clock Clock) ExponentialBackOffOpts {
 	return func(ebo *ExponentialBackOff) {
@@ -167,14 +158,15 @@ func (b *ExponentialBackOff) Reset() {
 }
 
 // NextBackOff calculates the next backoff interval using the formula:
-// 	Randomized interval = RetryInterval * (1 ± RandomizationFactor)
+//
+//	Randomized interval = RetryInterval * (1 ± RandomizationFactor)
 func (b *ExponentialBackOff) NextBackOff() time.Duration {
 	// Make sure we have not gone over the maximum elapsed time.
 	elapsed := b.GetElapsedTime()
 	next := getRandomValueFromInterval(b.RandomizationFactor, rand.Float64(), b.currentInterval)
 	b.incrementCurrentInterval()
 	if b.MaxElapsedTime != 0 && elapsed+next > b.MaxElapsedTime {
-		return b.Stop
+		return Stop
 	}
 	return next
 }
@@ -200,7 +192,8 @@ func (b *ExponentialBackOff) incrementCurrentInterval() {
 }
 
 // Returns a random value from the following interval:
-// 	[currentInterval - randomizationFactor * currentInterval, currentInterval + randomizationFactor * currentInterval].
+//
+//	[currentInterval - randomizationFactor * currentInterval, currentInterval + randomizationFactor * currentInterval].
 func getRandomValueFromInterval(randomizationFactor, random float64, currentInterval time.Duration) time.Duration {
 	if randomizationFactor == 0 {
 		return currentInterval // make sure no randomness is used when randomizationFactor is 0.

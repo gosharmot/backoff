@@ -83,17 +83,6 @@ func TestMaxElapsedTime(t *testing.T) {
 	assertEquals(t, Stop, exp.NextBackOff())
 }
 
-func TestCustomStop(t *testing.T) {
-	var exp = NewExponentialBackOff()
-	customStop := time.Minute
-	exp.Stop = customStop
-	exp.Clock = &TestClock{start: time.Time{}.Add(10000 * time.Second)}
-	// Change the currentElapsedTime to be 0 ensuring that the elapsed time will be greater
-	// than the max elapsed time.
-	exp.startTime = time.Time{}
-	assertEquals(t, customStop, exp.NextBackOff())
-}
-
 func TestBackOffOverflow(t *testing.T) {
 	var (
 		testInitialInterval time.Duration = math.MaxInt64 / 2
@@ -125,7 +114,6 @@ func TestNewExponentialBackOff(t *testing.T) {
 		WithMultiplier(2.0),
 		WithMaxInterval(10*time.Second),
 		WithMaxElapsedTime(30*time.Second),
-		WithRetryStopDuration(0),
 		WithClockProvider(SystemClock),
 	)
 
@@ -149,10 +137,6 @@ func TestNewExponentialBackOff(t *testing.T) {
 
 	if backOff.MaxElapsedTime != 30*time.Second {
 		t.Errorf("Expected MaxElapsedTime to be 30 seconds, got %v", backOff.MaxElapsedTime)
-	}
-
-	if backOff.Stop != 0 {
-		t.Errorf("Expected Stop to be 0 (no stop), got %v", backOff.Stop)
 	}
 
 	if backOff.Clock != SystemClock {
