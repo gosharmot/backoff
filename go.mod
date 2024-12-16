@@ -1,3 +1,3 @@
-module github.com/cenkalti/backoff/v4
+module github.com/cenkalti/backoff/v5
 
-go 1.18
+go 1.23
