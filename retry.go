@@ -18,7 +18,7 @@ type Notify func(error, time.Duration)
 // retryOptions holds configuration settings for the retry mechanism.
 type retryOptions struct {
 	BackOff        BackOff       // Strategy for calculating backoff periods.
-	Timer          Timer         // Timer to manage retry delays.
+	Timer          timer         // Timer to manage retry delays.
 	Notify         Notify        // Optional function to notify on each retry error.
 	MaxTries       uint          // Maximum number of retry attempts.
 	MaxElapsedTime time.Duration // Maximum total time for all retries.
@@ -33,9 +33,8 @@ func WithBackOff(b BackOff) RetryOption {
 	}
 }
 
-// WithTimer sets a custom timer for managing delays between retries.
-// TODO: Decide whether to make this configurable.
-func WithTimer(t Timer) RetryOption {
+// withTimer sets a custom timer for managing delays between retries.
+func withTimer(t timer) RetryOption {
 	return func(args *retryOptions) {
 		args.Timer = t
 	}

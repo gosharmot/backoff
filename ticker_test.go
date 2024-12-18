@@ -25,7 +25,8 @@ func TestTicker(t *testing.T) {
 	}
 
 	b := NewExponentialBackOff()
-	ticker := NewTickerWithTimer(b, &testTimer{})
+	ticker := NewTicker(b)
+	ticker.timer = &testTimer{}
 
 	var err error
 	for range ticker.C {

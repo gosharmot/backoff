@@ -13,7 +13,7 @@ type Ticker struct {
 	C        <-chan time.Time
 	c        chan time.Time
 	b        BackOff
-	timer    Timer
+	timer    timer
 	stop     chan struct{}
 	stopOnce sync.Once
 }
@@ -25,21 +25,12 @@ type Ticker struct {
 // provided backoff policy (notably calling NextBackOff or Reset)
 // while the ticker is running.
 func NewTicker(b BackOff) *Ticker {
-	return NewTickerWithTimer(b, &defaultTimer{})
-}
-
-// NewTickerWithTimer returns a new Ticker with a custom timer.
-// A default timer that uses system timer is used when nil is passed.
-func NewTickerWithTimer(b BackOff, timer Timer) *Ticker {
-	if timer == nil {
-		timer = &defaultTimer{}
-	}
 	c := make(chan time.Time)
 	t := &Ticker{
 		C:     c,
 		c:     c,
 		b:     b,
-		timer: timer,
+		timer: &defaultTimer{},
 		stop:  make(chan struct{}),
 	}
 	t.b.Reset()
