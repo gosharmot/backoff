@@ -95,16 +95,15 @@ func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOpti
 			return res, err
 		}
 
-		// Stop retrying if maximum elapsed time exceeded.
-		// TODO: Stop if next backoff is greater than max elapsed time.
-		if time.Since(startedAt) > args.MaxElapsedTime {
-			return res, err
-		}
-
 		// Handle permanent errors without retrying.
 		var permanent *PermanentError
 		if errors.As(err, &permanent) {
 			return res, err
+		}
+
+		// Stop retrying if context is cancelled.
+		if cerr := ctx.Err(); cerr != nil {
+			return res, cerr
 		}
 
 		// Calculate next backoff duration.
@@ -120,9 +119,9 @@ func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOpti
 			args.BackOff.Reset()
 		}
 
-		// Stop retrying if context is cancelled.
-		if cerr := ctx.Err(); cerr != nil {
-			return res, cerr
+		// Stop retrying if maximum elapsed time exceeded.
+		if time.Since(startedAt)+next > args.MaxElapsedTime {
+			return res, err
 		}
 
 		// Notify on error if a notifier function is provided.
