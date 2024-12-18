@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -41,6 +42,41 @@ func ExampleRetry() {
 
 	result, err := Retry(context.TODO(), operation, WithBackOff(NewExponentialBackOff()))
 	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Operation is successful.
+
+	fmt.Println(result)
+	// Output: hello
+}
+
+func ExampleTicker() {
+	// An operation that may fail.
+	operation := func() (string, error) {
+		return "hello", nil
+	}
+
+	ticker := NewTicker(NewExponentialBackOff())
+	defer ticker.Stop()
+
+	var result string
+	var err error
+
+	// Ticks will continue to arrive when the previous operation is still running,
+	// so operations that take a while to fail could run in quick succession.
+	for range ticker.C {
+		if result, err = operation(); err != nil {
+			log.Println(err, "will retry...")
+			continue
+		}
+
+		break
+	}
+
+	if err != nil {
+		// Operation has failed.
 		fmt.Println("Error:", err)
 		return
 	}
