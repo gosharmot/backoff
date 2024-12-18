@@ -2,22 +2,26 @@ package backoff
 
 import (
 	"context"
+	"fmt"
 	"log"
 )
 
 func ExampleRetry() {
 	// An operation that may fail.
-	operation := func() (bool, error) {
-		return true, nil
+	operation := func() (string, error) {
+		return "hello", nil
 	}
 
-	_, err := Retry(context.TODO(), operation, WithBackOff(NewExponentialBackOff()))
+	val, err := Retry(context.TODO(), operation, WithBackOff(NewExponentialBackOff()))
 	if err != nil {
 		// Handle error.
 		return
 	}
 
 	// Operation is successful.
+
+	fmt.Println(val)
+	// Output: hello
 }
 
 func ExampleTicker() {
