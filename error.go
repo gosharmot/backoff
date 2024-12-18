@@ -1,5 +1,10 @@
 package backoff
 
+import (
+	"fmt"
+	"time"
+)
+
 // PermanentError signals that the operation should not be retried.
 type PermanentError struct {
 	Err error
@@ -21,4 +26,16 @@ func (e *PermanentError) Error() string {
 
 func (e *PermanentError) Unwrap() error {
 	return e.Err
+}
+
+type RetryAfterError struct {
+	Duration time.Duration
+}
+
+func RetryAfter(seconds int) error {
+	return &RetryAfterError{Duration: time.Duration(seconds) * time.Second}
+}
+
+func (e *RetryAfterError) Error() string {
+	return fmt.Sprintf("retry after %s", e.Duration)
 }

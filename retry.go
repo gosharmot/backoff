@@ -113,6 +113,13 @@ func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOpti
 			return res, err
 		}
 
+		// Reset backoff if RetryAfterError is encountered.
+		var retryAfter *RetryAfterError
+		if errors.As(err, &retryAfter) {
+			next = retryAfter.Duration
+			args.BackOff.Reset()
+		}
+
 		// Stop retrying if context is cancelled.
 		if cerr := ctx.Err(); cerr != nil {
 			return res, cerr
