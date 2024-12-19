@@ -23,8 +23,8 @@ If you have specific needs, copy `Retry` function (from [retry.go][retry-src]) i
 
 [godoc]: https://pkg.go.dev/github.com/cenkalti/backoff/v5
 [godoc image]: https://godoc.org/github.com/cenkalti/backoff?status.png
-[coveralls]: https://coveralls.io/github/cenkalti/backoff?branch=master
-[coveralls image]: https://coveralls.io/repos/github/cenkalti/backoff/badge.svg?branch=master
+[coveralls]: https://coveralls.io/github/cenkalti/backoff?branch=v5
+[coveralls image]: https://coveralls.io/repos/github/cenkalti/backoff/badge.svg?branch=v5
 
 [google-http-java-client]: https://github.com/google/google-http-java-client/blob/da1aa993e90285ec18579f1553339b00e19b3ab5/google-http-client/src/main/java/com/google/api/client/util/ExponentialBackOff.java
 [exponential backoff wiki]: http://en.wikipedia.org/wiki/Exponential_backoff
