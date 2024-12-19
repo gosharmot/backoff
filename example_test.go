@@ -1,4 +1,4 @@
-package backoff
+package backoff_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/cenkalti/backoff/v5"
 )
 
 func ExampleRetry() {
@@ -24,7 +26,7 @@ func ExampleRetry() {
 		// In case on non-retriable error, return Permanent error to stop retrying.
 		// For this HTTP example, client errors are non-retriable.
 		if resp.StatusCode == 400 {
-			return "", Permanent(errors.New("bad request"))
+			return "", backoff.Permanent(errors.New("bad request"))
 		}
 
 		// If we are being rate limited, return a RetryAfter to specify how long to wait.
@@ -32,7 +34,7 @@ func ExampleRetry() {
 		if resp.StatusCode == 429 {
 			seconds, err := strconv.ParseInt(resp.Header.Get("Retry-After"), 10, 64)
 			if err == nil {
-				return "", RetryAfter(int(seconds))
+				return "", backoff.RetryAfter(int(seconds))
 			}
 		}
 
@@ -40,7 +42,7 @@ func ExampleRetry() {
 		return "hello", nil
 	}
 
-	result, err := Retry(context.TODO(), operation, WithBackOff(NewExponentialBackOff()))
+	result, err := backoff.Retry(context.TODO(), operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -58,7 +60,7 @@ func ExampleTicker() {
 		return "hello", nil
 	}
 
-	ticker := NewTicker(NewExponentialBackOff())
+	ticker := backoff.NewTicker(backoff.NewExponentialBackOff())
 	defer ticker.Stop()
 
 	var result string
