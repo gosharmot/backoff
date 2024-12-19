@@ -13,7 +13,7 @@ Import path is `github.com/cenkalti/backoff/v5`. Please note the version part at
 
 For most cases, use `Retry` function. See [example_test.go][example] for an example.
 
-If you have specific needs, copy the [`Retry`][retry-src] function into your code and modify it as needed.
+If you have specific needs, copy `Retry` function (from [retry.go][retry-src]) into your code and modify it as needed.
 
 ## Contributing
 
