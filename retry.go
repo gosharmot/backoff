@@ -9,8 +9,9 @@ import (
 // DefaultMaxElapsedTime sets a default limit for the total retry duration.
 const DefaultMaxElapsedTime = 15 * time.Minute
 
-// Operation is a function that attempts an operation and may be retried.
-type Operation[T any] func() (T, error)
+// GetOperation is a function that attempts an operation and may be retried.
+type GetOperation[T any] func() (T, error)
+type Operation func() error
 
 // Notify is a function called on operation error with the error and backoff duration.
 type Notify func(error, time.Duration)
@@ -61,11 +62,11 @@ func WithMaxElapsedTime(d time.Duration) RetryOption {
 	}
 }
 
-// Retry attempts the operation until success, a permanent error, or backoff completion.
+// GetRetry attempts the operation until success, a permanent error, or backoff completion.
 // It ensures the operation is executed at least once.
 //
 // Returns the operation result or error if retries are exhausted or context is cancelled.
-func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOption) (T, error) {
+func GetRetry[T any](ctx context.Context, operation GetOperation[T], opts ...RetryOption) (T, error) {
 	// Initialize default retry options.
 	args := &retryOptions{
 		BackOff:        NewExponentialBackOff(),
@@ -134,6 +135,83 @@ func Retry[T any](ctx context.Context, operation Operation[T], opts ...RetryOpti
 		case <-args.Timer.C():
 		case <-ctx.Done():
 			return res, ctx.Err()
+		}
+	}
+}
+
+// Retry attempts the operation until success, a permanent error, or backoff completion.
+// It ensures the operation is executed at least once.
+//
+// Returns the operation error if retries are exhausted or context is cancelled.
+func Retry(ctx context.Context, operation Operation, opts ...RetryOption) error {
+	// Initialize default retry options.
+	args := &retryOptions{
+		BackOff:        NewExponentialBackOff(),
+		Timer:          &defaultTimer{},
+		MaxElapsedTime: DefaultMaxElapsedTime,
+	}
+
+	// Apply user-provided options to the default settings.
+	for _, opt := range opts {
+		opt(args)
+	}
+
+	defer args.Timer.Stop()
+
+	startedAt := time.Now()
+	args.BackOff.Reset()
+	for numTries := uint(1); ; numTries++ {
+		// Execute the operation.
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		// Stop retrying if maximum tries exceeded.
+		if args.MaxTries > 0 && numTries >= args.MaxTries {
+			return err
+		}
+
+		// Handle permanent errors without retrying.
+		var permanent *PermanentError
+		if errors.As(err, &permanent) {
+			return err
+		}
+
+		// Stop retrying if context is cancelled.
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+
+		// Calculate next backoff duration.
+		next := args.BackOff.NextBackOff()
+		if next == Stop {
+			return err
+		}
+
+		// Reset backoff if RetryAfterError is encountered.
+		var retryAfter *RetryAfterError
+		if errors.As(err, &retryAfter) {
+			next = retryAfter.Duration
+			args.BackOff.Reset()
+		}
+
+		// Stop retrying if maximum elapsed time exceeded.
+		if time.Since(startedAt)+next > args.MaxElapsedTime {
+			return err
+		}
+
+		// Notify on error if a notifier function is provided.
+		if args.Notify != nil {
+			args.Notify(err, next)
+		}
+
+		// Wait for the next backoff period or context cancellation.
+		args.Timer.Start(next)
+		select {
+		case <-args.Timer.C():
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }

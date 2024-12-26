@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/cenkalti/backoff/v5"
+	"github.com/gosharmot/backoff/v5"
 )
 
 func ExampleRetry() {
@@ -42,13 +42,13 @@ func ExampleRetry() {
 		return "hello", nil
 	}
 
-	result, err := backoff.Retry(context.TODO(), operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
+	result, err := backoff.GetRetry(context.TODO(), operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
 
-	// Operation is successful.
+	// GetOperation is successful.
 
 	fmt.Println(result)
 	// Output: hello
@@ -78,12 +78,12 @@ func ExampleTicker() {
 	}
 
 	if err != nil {
-		// Operation has failed.
+		// GetOperation has failed.
 		fmt.Println("Error:", err)
 		return
 	}
 
-	// Operation is successful.
+	// GetOperation is successful.
 
 	fmt.Println(result)
 	// Output: hello

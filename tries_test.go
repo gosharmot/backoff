@@ -51,7 +51,7 @@ func TestMaxTriesZero(t *testing.T) {
 
 	b := WithMaxRetries(&ZeroBackOff{}, 0)
 
-	err := Retry(func() error {
+	err := GetRetry(func() error {
 		called++
 		return errors.New("err")
 	}, b)

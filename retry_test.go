@@ -46,7 +46,7 @@ func TestRetry(t *testing.T) {
 		return false, errors.New("error")
 	}
 
-	_, err := Retry(context.Background(), f, WithBackOff(NewExponentialBackOff()), withTimer(&testTimer{}))
+	_, err := GetRetry(context.Background(), f, WithBackOff(NewExponentialBackOff()), withTimer(&testTimer{}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
@@ -73,7 +73,7 @@ func TestRetryWithData(t *testing.T) {
 		return 1, errors.New("error")
 	}
 
-	res, err := Retry(context.Background(), f, WithBackOff(NewExponentialBackOff()), withTimer(&testTimer{}))
+	res, err := GetRetry(context.Background(), f, WithBackOff(NewExponentialBackOff()), withTimer(&testTimer{}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
@@ -107,7 +107,7 @@ func TestRetryContext(t *testing.T) {
 		return false, fmt.Errorf("error (%d)", i)
 	}
 
-	_, err := Retry(ctx, f, WithBackOff(NewConstantBackOff(time.Millisecond)), withTimer(&testTimer{}))
+	_, err := GetRetry(ctx, f, WithBackOff(NewConstantBackOff(time.Millisecond)), withTimer(&testTimer{}))
 	if err == nil {
 		t.Errorf("error is unexpectedly nil")
 	}
@@ -124,7 +124,7 @@ func TestRetryPermanent(t *testing.T) {
 		numRetries := -1
 		maxRetries := 1
 
-		res, _ := Retry(
+		res, _ := GetRetry(
 			context.Background(),
 			func() (int, error) {
 				numRetries++

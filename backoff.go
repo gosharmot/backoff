@@ -1,7 +1,7 @@
 // Package backoff implements backoff algorithms for retrying operations.
 //
-// Use Retry function for retrying operations that may fail.
-// If Retry does not meet your needs,
+// Use GetRetry function for retrying operations that may fail.
+// If GetRetry does not meet your needs,
 // copy/paste the function into your project and modify as you wish.
 //
 // There is also Ticker type similar to time.Ticker.
